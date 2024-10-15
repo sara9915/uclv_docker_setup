@@ -1,0 +1,119 @@
+ARG FROM_IMAGE=ros:foxy-ros1-bridge-focal
+ARG OVERLAY_WS_ROS1=/home/tactile_ws
+
+
+FROM $FROM_IMAGE 
+ARG OVERLAY_WS_ROS1
+WORKDIR $OVERLAY_WS_ROS1/src
+
+
+# Usefull packages
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AD19BAB3CBF125EA
+
+RUN apt update -y \
+    && apt upgrade -y \
+    && apt install -y \
+    setserial \ 
+    python3-pip \
+    git \
+    python3-catkin-tools \ 
+    ros-noetic-catkin \
+    libblas-dev \ 
+    liblapack-dev \ 
+    && pip install vcstool \
+    && apt-get install -y setserial 
+    
+################# Clone required repositories ######################
+ARG OVERLAY_WS_ROS1
+WORKDIR $OVERLAY_WS_ROS1/src
+
+# Clone serial
+RUN echo "\
+repositories: \n\
+  serial: \n\
+    type: git \n\
+    url: https://github.com/wjwwood/serial.git \n\
+    version: cbcca7c83745fedd75afb7a0a27ee5c4112435c2 \n\
+" > ../overlay.repos
+RUN vcs import ./ < ../overlay.repos
+
+# Clone ros_toon
+RUN echo "\
+repositories: \n\
+  ros_toon: \n\
+    type: git \n\
+    url: https://github.com/marcocostanzo/ros_toon.git \n\
+    version: TOON_3.2 \n\
+" > ../overlay.repos
+RUN vcs import ./ < ../overlay.repos
+
+# Clone sun_system_lib
+RUN echo "\
+repositories: \n\
+  sun_systems_lib: \n\
+    type: git \n\
+    url: https://github.com/marcocostanzo/sun_systems_lib.git \n\
+    version: master \n\
+" > ../overlay.repos
+RUN vcs import ./ < ../overlay.repos
+
+# Clone sun_learning_lib
+RUN echo "\
+repositories: \n\
+  sun_learning_lib: \n\
+    type: git \n\
+    url: https://github.com/marcocostanzo/sun_learning_lib.git \n\
+    version: V2 \n\
+" > ../overlay.repos
+RUN vcs import ./ < ../overlay.repos
+
+# Clone sun_ros_msgs
+RUN echo "\
+repositories: \n\
+  sun_ros_msgs: \n\
+    type: git \n\
+    url: https://github.com/marcocostanzo/sun_ros_msgs.git \n\
+    version: master \n\
+" > ../overlay.repos
+RUN vcs import ./ < ../overlay.repos
+
+# Clone sun_tactile_sensor
+RUN echo "\
+repositories: \n\
+  sun_tactile_sensor: \n\
+    type: git \n\
+    url: https://github.com/marcocostanzo/tactile_sensor_ros.git \n\
+    version: master \n\
+" > ../overlay.repos
+RUN vcs import ./ < ../overlay.repos
+
+######################################################
+
+
+# copy manifests for caching
+WORKDIR /opt
+RUN mkdir -p /tmp/opt && \
+    find ./ -name "package.xml" | \
+      xargs cp --parents -t /tmp/opt && \
+    find ./ -name "CATKIN_IGNORE" | \
+      xargs cp --parents -t /tmp/opt || true
+
+
+# install overlay dependencies
+ARG OVERLAY_WS_ROS1
+WORKDIR $OVERLAY_WS_ROS1
+RUN . /opt/ros/$ROS1_DISTRO/setup.sh && \
+    apt-get update && rosdep install --from-paths src --ignore-src -r -y \
+    && rm -rf /var/lib/apt/lists/* 
+
+# build overlay source
+RUN . /opt/ros/$ROS1_DISTRO/setup.sh && \
+    catkin build -DCMAKE_BUILD_TYPE=Release
+
+RUN echo "source devel/setup.bash" >> ~/.bashrc
+RUN echo "export ROS_IP=172.18.0.4" >> ~/.bashrc
+RUN echo "export ROS_MASTER_URI=http://172.18.0.2:11311/" >> ~/.bashrc
+
+
+
+
